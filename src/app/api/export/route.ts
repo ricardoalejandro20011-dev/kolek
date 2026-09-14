@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { assertCan, AuthorizationError } from '@/lib/rbac';
 import { formatFecha } from '@/lib/utils';
-import type { PaymentRow } from '@/lib/types';
+import type { PaymentRow, Profile } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,18 @@ export async function GET(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+
+  const { data: perfil } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle<Profile>();
+  try {
+    assertCan(perfil?.role, 'reports.export');
+  } catch (e) {
+    if (e instanceof AuthorizationError) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
 
   const url = new URL(req.url);
   const ciclo = url.searchParams.get('ciclo');

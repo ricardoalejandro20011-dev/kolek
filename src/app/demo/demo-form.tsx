@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { trackClient } from '@/lib/analytics-client';
 
 const RANGOS_ALUMNOS = ['Menos de 80', '80–300', '300–700', 'Más de 700'];
 
@@ -13,9 +15,17 @@ export function DemoForm() {
   const [escuela, setEscuela] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [alumnos, setAlumnos] = useState('');
+  const [aceptaContacto, setAceptaContacto] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);
+  const yaAvisoInicio = useRef(false);
+
+  useEffect(() => {
+    if (yaAvisoInicio.current) return;
+    yaAvisoInicio.current = true;
+    trackClient('demo_form_start');
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,6 +33,10 @@ export function DemoForm() {
 
     if (!alumnos) {
       setError('Elige un rango aproximado de alumnos.');
+      return;
+    }
+    if (!aceptaContacto) {
+      setError('Necesitamos tu autorización para contactarte.');
       return;
     }
 
@@ -36,6 +50,7 @@ export function DemoForm() {
           escuela: escuela.trim(),
           whatsapp: whatsapp.trim(),
           alumnos_aprox: alumnos,
+          acepta_contacto: true,
           sitio_web: '',
         }),
       });
@@ -60,7 +75,7 @@ export function DemoForm() {
           Listo, ya llegó tu solicitud
         </h2>
         <p className="mt-2 text-[13px] leading-relaxed text-emerald-800/85">
-          Te contactamos por WhatsApp para agendar una demo con datos de tu propia escuela.
+          Te contactamos por WhatsApp para agendar tu demo de 15 minutos, adaptada a tu escuela.
         </p>
       </div>
     );
@@ -114,7 +129,7 @@ export function DemoForm() {
               role="radio"
               aria-checked={alumnos === r}
               onClick={() => setAlumnos(r)}
-              className={`rounded-[10px] border px-3 py-2 text-[13px] transition-colors ${
+              className={`min-h-[44px] rounded-[10px] border px-3 py-2 text-[13px] transition-colors ${
                 alumnos === r
                   ? 'border-brand-400 bg-brand-50 text-brand-700'
                   : 'border-[#111111]/12 text-muted-foreground hover:border-[#111111]/25'
@@ -125,6 +140,20 @@ export function DemoForm() {
           ))}
         </div>
       </div>
+
+      <label className="flex items-start gap-2.5 text-[12px] leading-relaxed text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={aceptaContacto}
+          onChange={(e) => setAceptaContacto(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#111111]/25"
+        />
+        Autorizo a Kolek a contactarme por WhatsApp para agendar la demo. Ver el{' '}
+        <Link href="/aviso-privacidad" className="underline underline-offset-2 hover:text-ink">
+          aviso de privacidad
+        </Link>
+        .
+      </label>
 
       {/* Honeypot: oculto para personas, visible para bots que llenan todo. */}
       <input
@@ -147,7 +176,7 @@ export function DemoForm() {
       </Button>
 
       <p className="text-[12px] leading-relaxed text-muted-foreground">
-        Sin compromiso. Nada de tarjeta ni cuenta todavía.
+        15 minutos · Sin compromiso · Sin tarjeta
       </p>
     </form>
   );

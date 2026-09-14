@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
-import { CheckCircle2, Clock, Info, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Clock, FlaskConical, Info, RotateCcw, TriangleAlert, XCircle } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { asegurarPreferencia } from '@/lib/payments';
-import { esModoPrueba, getMpCreds } from '@/lib/mercadopago';
+import { asegurarIntentoDeCobro } from '@/lib/payments';
 import { CheckoutBrick } from '@/components/pago/checkout-brick';
+import { SimulatePanel } from '@/components/pago/simulate-panel';
 import { LogoMark } from '@/components/brand/logo';
 import { brand } from '@/config/brand';
 import { Badge } from '@/components/ui/badge';
@@ -23,12 +23,12 @@ export const metadata: Metadata = {
 interface PagoPublico {
   id: string;
   school_id: string;
+  student_id: string;
+  concept_id: string;
   ciclo: string;
   monto_concepto: number;
   monto_total_cobrado: number;
-  status: 'pendiente' | 'pagado' | 'atrasado';
-  mp_preference_id: string | null;
-  mp_status: string | null;
+  status: string;
   fecha_pago: string | null;
   fecha_vencimiento: string;
   link_token: string;
@@ -56,8 +56,8 @@ export default async function PagoPage({
   const { data: pago } = await db
     .from('payments')
     .select(
-      `id, school_id, ciclo, monto_concepto, monto_total_cobrado, status, mp_preference_id,
-       mp_status, fecha_pago, fecha_vencimiento, link_token, metodo_pago,
+      `id, school_id, student_id, concept_id, ciclo, monto_concepto, monto_total_cobrado, status,
+       fecha_pago, fecha_vencimiento, link_token, metodo_pago,
        students ( nombre_alumno, nombre_tutor, email_tutor, groups ( nombre ) ),
        concepts ( nombre )`,
     )
@@ -79,29 +79,48 @@ export default async function PagoPage({
   const d = desglose(Number(pago.monto_concepto));
   const yaPagado = pago.status === 'pagado';
   const vencido = pago.status === 'atrasado';
+  const cancelado = pago.status === 'cancelado';
+  const reembolsado = pago.status === 'reembolsado';
+  const disputado = pago.status === 'disputado';
+  const procesando = pago.status === 'procesando';
 
-  // Preference perezosa: si no se creó al generar el ciclo, se crea al abrirse.
-  let preferenceId = pago.mp_preference_id;
-  let errorMp: string | null = null;
+  // Intento de cobro perezoso: si no se creó al generar el ciclo, se crea al abrirse.
+  let providerId: string | null = null;
+  let providerReference: string | null = null;
+  let publicKey: string | null = null;
+  let errorProveedor: string | null = null;
 
-  if (!yaPagado) {
-    const r = await asegurarPreferencia(db, pago, school, {
+  if (!yaPagado && !cancelado && !reembolsado) {
+    const r = await asegurarIntentoDeCobro(db, pago, school, {
       conceptoNombre: concepto,
       alumnoNombre: alumno?.nombre_alumno ?? 'Alumno',
+      studentId: pago.student_id,
+      conceptId: pago.concept_id,
       tutorNombre: alumno?.nombre_tutor,
       tutorEmail: alumno?.email_tutor,
     });
-    preferenceId = r.preferenceId;
-    errorMp = r.error;
+    providerId = r.providerId;
+    // Para el Wallet Brick de Mercado Pago se necesita el ID de la
+    // preference (providerReference), NO la URL de checkout hospedado.
+    providerReference = r.providerReference;
+    publicKey = r.publicKey;
+    errorProveedor = r.error;
   }
 
-  const creds = getMpCreds(school);
-  const publicKey = creds?.publicKey ?? null;
-  const prueba = esModoPrueba(creds?.accessToken);
+  const modoDemo = providerId === 'mock';
 
   return (
     <div className="flex min-h-screen flex-col bg-[#111111]/[0.015]">
       <main className="mx-auto w-full max-w-[520px] flex-1 px-5 py-10 sm:py-16">
+        {modoDemo && (
+          <div className="mb-4 flex items-center gap-2 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2">
+            <FlaskConical className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+            <p className="text-[11px] font-medium text-amber-900">
+              Modo de prueba — {brand.name} sandbox. Ningún cargo aquí es real.
+            </p>
+          </div>
+        )}
+
         {/* Escuela */}
         <div className="flex items-center gap-3">
           {school.logo_url ? (
@@ -138,20 +157,48 @@ export default async function PagoPage({
                 <p className="text-[14px] font-semibold text-emerald-900">Este pago ya está cubierto</p>
                 <p className="mt-0.5 text-[12px] leading-relaxed text-emerald-800/80">
                   Registrado el {formatFechaHora(pago.fecha_pago)}
-                  {pago.metodo_pago === 'manual'
-                    ? ' directamente en la escuela.'
-                    : ' por Mercado Pago.'}{' '}
-                  No necesitas hacer nada más.
+                  {pago.metodo_pago === 'manual' ? ' directamente en la escuela.' : '.'} No
+                  necesitas hacer nada más.
                 </p>
               </div>
             </div>
-          ) : searchParams.estado === 'pending' ? (
+          ) : reembolsado ? (
+            <div className="flex items-start gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4">
+              <RotateCcw className="mt-0.5 h-5 w-5 shrink-0 text-slate-600" />
+              <div>
+                <p className="text-[14px] font-semibold text-slate-900">Pago reembolsado</p>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-slate-700/80">
+                  El monto fue devuelto. Si esperabas que siguiera activo, contacta a {school.name}.
+                </p>
+              </div>
+            </div>
+          ) : cancelado ? (
+            <div className="flex items-start gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4">
+              <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-600" />
+              <div>
+                <p className="text-[14px] font-semibold text-slate-900">Este cobro fue cancelado</p>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-slate-700/80">
+                  La escuela canceló este cargo. Contáctala si crees que es un error.
+                </p>
+              </div>
+            </div>
+          ) : disputado ? (
+            <div className="flex items-start gap-3 border-b border-red-200 bg-red-50 px-6 py-4">
+              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+              <div>
+                <p className="text-[14px] font-semibold text-red-900">Pago en disputa</p>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-red-800/80">
+                  Este cargo está en revisión. La escuela te contactará con más información.
+                </p>
+              </div>
+            </div>
+          ) : procesando || searchParams.estado === 'pending' ? (
             <div className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-6 py-4">
               <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
               <div>
                 <p className="text-[14px] font-semibold text-amber-900">Pago en proceso</p>
                 <p className="mt-0.5 text-[12px] leading-relaxed text-amber-800/80">
-                  Mercado Pago todavía está confirmando. En cuanto se apruebe, la escuela lo ve
+                  El proveedor todavía está confirmando. En cuanto se apruebe, la escuela lo ve
                   reflejado automáticamente.
                 </p>
               </div>
@@ -220,7 +267,7 @@ export default async function PagoPage({
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-[13px] text-muted-foreground">
-                    Comisión de procesamiento
+                    Costo de procesamiento
                   </span>
                   <span className="tnum text-[14px] text-ink">{formatMXN(d.comision)}</span>
                 </div>
@@ -234,32 +281,24 @@ export default async function PagoPage({
 
               <p className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
                 <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                La comisión corresponde al procesamiento de pagos en línea de Mercado Pago. La
-                escuela recibe {formatMXN(d.concepto)} íntegros.
+                {school.name} decidió que el tutor absorbe el costo de procesamiento. La escuela
+                recibe {formatMXN(d.concepto)} íntegros.
               </p>
             </div>
 
             {/* Botón de pago */}
-            {!yaPagado && (
+            {!yaPagado && !cancelado && !reembolsado && (
               <div className="mt-6">
-                {preferenceId && publicKey ? (
-                  <>
-                    {prueba && (
-                      <div className="mb-3 rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-900">
-                        Modo de prueba: este cobro no es real.
-                      </div>
-                    )}
-                    <CheckoutBrick preferenceId={preferenceId} publicKey={publicKey} />
-                  </>
+                {modoDemo ? (
+                  <SimulatePanel token={pago.link_token} />
+                ) : providerReference && publicKey ? (
+                  <CheckoutBrick preferenceId={providerReference} publicKey={publicKey} />
                 ) : (
                   <div className="rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-relaxed text-amber-900">
                     <p className="font-medium">El pago en línea no está disponible ahora</p>
                     <p className="mt-1 text-[12px] text-amber-900/80">
-                      {errorMp ??
-                        (!publicKey
-                          ? 'La escuela no ha terminado de configurar su llave pública de Mercado Pago.'
-                          : 'Intenta de nuevo en unos minutos.')}{' '}
-                      Contacta a {school.name}
+                      {errorProveedor ?? 'Intenta de nuevo en unos minutos.'} Contacta a{' '}
+                      {school.name}
                       {school.whatsapp ? ` al ${school.whatsapp}` : ''} para pagar por otro medio.
                     </p>
                   </div>
@@ -271,13 +310,39 @@ export default async function PagoPage({
           {/* Pie */}
           <div className="flex items-center justify-between border-t border-[#111111]/[0.07] bg-[#111111]/[0.015] px-6 py-3">
             <Badge variant={yaPagado ? 'pagado' : vencido ? 'atrasado' : 'pendiente'}>
-              {yaPagado ? 'Pagado' : vencido ? 'Vencido' : 'Pendiente'}
+              {yaPagado
+                ? 'Pagado'
+                : reembolsado
+                  ? 'Reembolsado'
+                  : cancelado
+                    ? 'Cancelado'
+                    : disputado
+                      ? 'En disputa'
+                      : procesando
+                        ? 'Procesando'
+                        : vencido
+                          ? 'Vencido'
+                          : 'Pendiente'}
             </Badge>
             <span className="text-[11px] text-muted-foreground">
-              Referencia {pago.id.slice(0, 8).toUpperCase()}
+              Folio {pago.id.slice(0, 8).toUpperCase()}
             </span>
           </div>
         </div>
+
+        {/* Recibo / estado de cuenta */}
+        {yaPagado && (
+          <div className="mt-3 flex flex-wrap gap-3 text-[12px]">
+            <a
+              href={`/recibo/${pago.link_token}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-brand-600 hover:underline"
+            >
+              Ver / descargar recibo
+            </a>
+          </div>
+        )}
 
         {/* Firma */}
         <p className="mt-6 flex items-center justify-center gap-1.5 text-[12px] text-muted-foreground">

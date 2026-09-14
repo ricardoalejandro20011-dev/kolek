@@ -6,19 +6,18 @@ const COLUMNAS = [
   {
     titulo: 'Producto',
     links: [
-      { href: '/#casos', label: 'Para tu escuela' },
+      { href: '/#beneficios', label: 'Qué hace Kolek' },
       { href: '/#como', label: 'Cómo funciona' },
-      { href: '/#comision', label: 'Costos de procesamiento' },
       { href: '/planes', label: 'Planes y precios' },
     ],
   },
   {
     titulo: 'Tipos de escuela',
     links: [
-      { href: '/#casos', label: 'Estancias infantiles y kínder' },
-      { href: '/#casos', label: 'Primaria y secundaria' },
-      { href: '/#casos', label: 'Prepa y universidad' },
-      { href: '/#casos', label: 'Academias y cursos' },
+      { href: '/#tipos', label: 'Estancias infantiles y kínder' },
+      { href: '/#tipos', label: 'Primaria y secundaria' },
+      { href: '/#tipos', label: 'Prepa y universidad' },
+      { href: '/#tipos', label: 'Academias y cursos' },
     ],
   },
   {
@@ -28,6 +27,15 @@ const COLUMNAS = [
       { href: '/registro', label: 'Crear cuenta' },
       { href: '/login', label: 'Entrar' },
       { href: '/#faq', label: 'Preguntas frecuentes' },
+    ],
+  },
+  {
+    titulo: 'Legal',
+    links: [
+      { href: '/aviso-privacidad', label: 'Aviso de privacidad' },
+      { href: '/terminos', label: 'Términos y condiciones' },
+      { href: '/cancelacion', label: 'Cancelación' },
+      { href: '/contacto', label: 'Contacto' },
     ],
   },
 ];
@@ -48,7 +56,7 @@ export function SiteFooter() {
             </p>
           </div>
 
-          <div className="grid gap-10 sm:grid-cols-3 md:col-span-8">
+          <div className="grid gap-10 sm:grid-cols-2 md:col-span-8 lg:grid-cols-4">
             {COLUMNAS.map((col) => (
               <div key={col.titulo}>
                 <p className="eyebrow">{col.titulo}</p>

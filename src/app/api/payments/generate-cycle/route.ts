@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { calcTotalConComision } from '@/lib/fees';
-import { asegurarPreferencia, resolverMonto } from '@/lib/payments';
+import { asegurarIntentoDeCobro, resolverMonto } from '@/lib/payments';
+import { assertCan, AuthorizationError } from '@/lib/rbac';
+import { evaluarAcceso, type Subscription } from '@/lib/subscriptions';
+import { registrarAuditoria, ipDeRequest } from '@/lib/audit';
+import { pesosToCentavos } from '@/lib/money';
 import { mapLimit, vencimientoDeCiclo } from '@/lib/utils';
-import type { Concept, Group, School, Student } from '@/lib/types';
+import type { Concept, Group, Profile, School, Student } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,9 +26,11 @@ const Body = z.object({
 /**
  * POST /api/payments/generate-cycle
  *
- * Crea los pagos faltantes del ciclo para todos los alumnos ACTIVOS de los
- * grupos indicados, calcula el total con comisión y genera la preference de
- * Mercado Pago de cada uno. Es idempotente: si el pago ya existe, lo salta.
+ * Crea los cargos faltantes del ciclo para todos los alumnos ACTIVOS de los
+ * grupos indicados, calcula el total con comisión y asegura el intento de
+ * cobro con el proveedor que le toque a la escuela (mock o real). Es
+ * idempotente por el UNIQUE(student_id, concept_id, ciclo) de `payments`:
+ * generar el mismo ciclo dos veces nunca duplica cargos.
  */
 export async function POST(req: Request) {
   const supabase = createClient();
@@ -36,6 +42,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
   }
 
+  const { data: perfil } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle<Profile>();
+
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await req.json());
@@ -44,6 +56,13 @@ export async function POST(req: Request) {
       { error: e instanceof z.ZodError ? e.errors[0]?.message : 'Cuerpo inválido' },
       { status: 400 },
     );
+  }
+
+  try {
+    assertCan(perfil?.role, 'charges.generate');
+  } catch (e) {
+    if (e instanceof AuthorizationError) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
   }
 
   // RLS ya limita a la escuela del usuario; esto confirma que el id coincide.
@@ -55,6 +74,21 @@ export async function POST(req: Request) {
 
   if (!school) {
     return NextResponse.json({ error: 'Escuela no encontrada' }, { status: 403 });
+  }
+
+  // Una escuela con la suscripción vencida (fuera de gracia) o cancelada no
+  // puede generar cargos nuevos — sí puede seguir consultando/exportando.
+  const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('school_id', school.id)
+    .maybeSingle<Subscription>();
+  const acceso = evaluarAcceso(sub);
+  if (!acceso.accesoCompleto) {
+    return NextResponse.json(
+      { error: acceso.motivo ?? 'Tu suscripción no permite generar cargos nuevos.' },
+      { status: 402 },
+    );
   }
 
   const { data: concept } = await supabase
@@ -137,7 +171,7 @@ export async function POST(req: Request) {
       creados: 0,
       omitidos_ya_existian: yaTienen.size,
       sin_monto: sinMonto,
-      preferencias_creadas: 0,
+      intentos_de_cobro_creados: 0,
       mensaje:
         sinMonto.length > 0
           ? 'Ningún alumno tiene monto asignado. Define el monto del grupo o del alumno.'
@@ -145,23 +179,44 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── Insertar pagos ─────────────────────────────────────────────────
-  const filas = nuevos.map(({ student, monto }) => ({
-    school_id: school.id,
-    student_id: student.id,
-    concept_id: concept.id,
-    ciclo: body.ciclo,
-    monto_concepto: monto,
-    monto_total_cobrado: calcTotalConComision(monto),
-    fecha_vencimiento: fechaVenc,
-    status: 'pendiente' as const,
-  }));
+  // ── Registro del ciclo (billing_cycles) ────────────────────────────
+  const { data: cycle } = await supabase
+    .from('billing_cycles')
+    .insert({
+      school_id: school.id,
+      concept_id: concept.id,
+      ciclo: body.ciclo,
+      group_ids: body.group_ids,
+      status: 'published',
+      charges_count: nuevos.length,
+      created_by: user.id,
+      published_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  // ── Insertar cargos ─────────────────────────────────────────────────
+  const filas = nuevos.map(({ student, monto }) => {
+    const totalConComision = calcTotalConComision(monto);
+    return {
+      school_id: school.id,
+      student_id: student.id,
+      concept_id: concept.id,
+      ciclo: body.ciclo,
+      monto_concepto: monto,
+      monto_total_cobrado: totalConComision,
+      amount_centavos: pesosToCentavos(monto),
+      total_centavos: pesosToCentavos(totalConComision),
+      fecha_vencimiento: fechaVenc,
+      status: 'pendiente' as const,
+      billing_cycle_id: cycle?.id ?? null,
+    };
+  });
 
   const creados: {
     id: string;
     link_token: string;
     monto_total_cobrado: number;
-    mp_preference_id: string | null;
     fecha_vencimiento: string;
     ciclo: string;
     student_id: string;
@@ -171,44 +226,54 @@ export async function POST(req: Request) {
     const { data, error } = await supabase
       .from('payments')
       .insert(filas.slice(i, i + 200))
-      .select(
-        'id, link_token, monto_total_cobrado, mp_preference_id, fecha_vencimiento, ciclo, student_id',
-      );
+      .select('id, link_token, monto_total_cobrado, fecha_vencimiento, ciclo, student_id');
     if (error) {
       return NextResponse.json(
-        { error: `No se pudieron crear los pagos: ${error.message}`, creados: creados.length },
+        { error: `No se pudieron crear los cargos: ${error.message}`, creados: creados.length },
         { status: 500 },
       );
     }
     creados.push(...(data as typeof creados));
   }
 
-  // ── Preferences de Mercado Pago (concurrencia limitada) ────────────
+  // ── Intentos de cobro con el proveedor que le toque a la escuela ───
   const porAlumno = new Map(nuevos.map(({ student }) => [student.id, student]));
-  let preferenciasCreadas = 0;
-  let errorMp: string | null = null;
+  let intentosCreados = 0;
+  let errorProveedor: string | null = null;
 
   const resultados = await mapLimit(creados, 6, async (p) => {
     const s = porAlumno.get(p.student_id);
-    return asegurarPreferencia(supabase, p, school, {
+    return asegurarIntentoDeCobro(supabase, p, school, {
       conceptoNombre: concept.nombre,
       alumnoNombre: s?.nombre_alumno ?? 'Alumno',
+      studentId: p.student_id,
+      conceptId: concept.id,
       tutorNombre: s?.nombre_tutor,
       tutorEmail: s?.email_tutor,
     });
   });
 
   for (const r of resultados) {
-    if (r.preferenceId) preferenciasCreadas++;
-    else if (!errorMp && r.error) errorMp = r.error;
+    if (r.providerReference) intentosCreados++;
+    else if (!errorProveedor && r.error) errorProveedor = r.error;
   }
+
+  await registrarAuditoria({
+    schoolId: school.id,
+    userId: user.id,
+    action: 'billing_cycle.generated',
+    entityType: 'billing_cycle',
+    entityId: cycle?.id,
+    after: { ciclo: body.ciclo, concept_id: concept.id, cargos_creados: creados.length },
+    ip: ipDeRequest(req),
+  });
 
   return NextResponse.json({
     creados: creados.length,
     omitidos_ya_existian: yaTienen.size,
     sin_monto: sinMonto,
-    preferencias_creadas: preferenciasCreadas,
-    // Los links funcionan aunque MP falle: /p/[token] reintenta al abrirse.
-    aviso_mp: preferenciasCreadas < creados.length ? errorMp : null,
+    intentos_de_cobro_creados: intentosCreados,
+    // Los links funcionan aunque el proveedor falle: /p/[token] reintenta al abrirse.
+    aviso_proveedor: intentosCreados < creados.length ? errorProveedor : null,
   });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { asegurarPreferencia } from '@/lib/payments';
+import { asegurarIntentoDeCobro } from '@/lib/payments';
 import { enviarTemplate, getWaCreds, renderMensaje } from '@/lib/whatsapp';
 import { cicloActual, cicloLabel, linkDePago, mapLimit } from '@/lib/utils';
 import type { School } from '@/lib/types';
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     const { data: pagos } = await db
       .from('payments')
       .select(
-        `id, school_id, ciclo, link_token, monto_total_cobrado, mp_preference_id, fecha_vencimiento,
+        `id, school_id, student_id, concept_id, ciclo, link_token, monto_total_cobrado, fecha_vencimiento,
          students ( nombre_alumno, nombre_tutor, whatsapp_tutor, email_tutor, status ),
          concepts ( nombre )`,
       )
@@ -84,9 +84,11 @@ export async function GET(req: Request) {
       const alumno = p.students;
       const concepto = p.concepts?.nombre ?? 'Pago';
 
-      await asegurarPreferencia(db, p, school, {
+      await asegurarIntentoDeCobro(db, p, school, {
         conceptoNombre: concepto,
         alumnoNombre: alumno.nombre_alumno,
+        studentId: p.student_id,
+        conceptId: p.concept_id,
         tutorNombre: alumno.nombre_tutor,
         tutorEmail: alumno.email_tutor,
       });

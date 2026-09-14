@@ -388,13 +388,15 @@ export function OnboardingWizard({
       return;
     }
     setGuardando(true);
-    const { error } = await supabase
-      .from('schools')
-      .update({ onboarding_completo: true, dia_vencimiento: diaVencimiento })
-      .eq('id', school.id);
+    const res = await fetch('/api/onboarding/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dia_vencimiento: diaVencimiento }),
+    });
+    const json = await res.json().catch(() => ({}));
     setGuardando(false);
 
-    if (error) return toast.error(error.message);
+    if (!res.ok) return toast.error(json.error ?? 'No se pudo completar el onboarding');
 
     toast.success('Tu escuela está lista');
     router.push('/dashboard');

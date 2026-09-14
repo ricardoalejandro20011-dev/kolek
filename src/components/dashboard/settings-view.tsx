@@ -46,8 +46,16 @@ import { createClient } from '@/lib/supabase/client';
 import { brand } from '@/config/brand';
 import { calcTotalConComision, formatMXN } from '@/lib/fees';
 import { PLAN_POR_ID, PLANES } from '@/lib/plans';
+import type { Subscription } from '@/lib/subscriptions';
 import { NIVELES, type Concept, type Group, type Profile, type School, type SchoolNivel, type SchoolPlan } from '@/lib/types';
 import { cn, normalizarWhatsapp, whatsappValido } from '@/lib/utils';
+
+export interface MpConexionPublica {
+  status: 'disconnected' | 'connected' | 'error';
+  external_account_id: string | null;
+  public_key: string | null;
+  last_error: string | null;
+}
 
 export function SettingsView({
   school: schoolInicial,
@@ -57,6 +65,9 @@ export function SettingsView({
   miId,
   miRol,
   alumnosPorGrupo,
+  mpConexion,
+  mpPlataformaConfigurada,
+  suscripcion,
 }: {
   school: School;
   grupos: Group[];
@@ -65,6 +76,9 @@ export function SettingsView({
   miId: string;
   miRol: string;
   alumnosPorGrupo: Record<string, number>;
+  mpConexion: MpConexionPublica | null;
+  mpPlataformaConfigurada: boolean;
+  suscripcion: Subscription | null;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -114,7 +128,12 @@ export function SettingsView({
       </TabsContent>
 
       <TabsContent value="integraciones">
-        <Integraciones school={school} onGuardar={guardarEscuela} />
+        <Integraciones
+          school={school}
+          onGuardar={guardarEscuela}
+          mpConexion={mpConexion}
+          mpPlataformaConfigurada={mpPlataformaConfigurada}
+        />
       </TabsContent>
 
       <TabsContent value="equipo">
@@ -122,7 +141,7 @@ export function SettingsView({
       </TabsContent>
 
       <TabsContent value="plan">
-        <PlanActual school={school} onGuardar={guardarEscuela} />
+        <PlanActual school={school} suscripcion={suscripcion} />
       </TabsContent>
     </Tabs>
   );
@@ -764,28 +783,43 @@ function CampoSecreto({
 function Integraciones({
   school,
   onGuardar,
+  mpConexion,
+  mpPlataformaConfigurada,
 }: {
   school: School;
   onGuardar: (patch: Partial<School>, mensaje?: string) => Promise<void>;
+  mpConexion: MpConexionPublica | null;
+  mpPlataformaConfigurada: boolean;
 }) {
-  const [mpToken, setMpToken] = useState(school.mp_access_token ?? '');
-  const [mpKey, setMpKey] = useState(school.mp_public_key ?? '');
+  const router = useRouter();
   const [waToken, setWaToken] = useState(school.whatsapp_token ?? '');
   const [waPhone, setWaPhone] = useState(school.whatsapp_phone_number_id ?? '');
-  const [g1, setG1] = useState(false);
   const [g2, setG2] = useState(false);
+  const [desconectando, setDesconectando] = useState(false);
 
-  const esPrueba = mpToken.startsWith('TEST-');
+  const conectado = mpConexion?.status === 'connected';
   const urlWebhook =
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/webhooks/whatsapp`
       : '/api/webhooks/whatsapp';
 
+  async function desconectarMp() {
+    setDesconectando(true);
+    const res = await fetch('/api/integrations/mercadopago/disconnect', { method: 'POST' });
+    setDesconectando(false);
+    if (res.ok) {
+      toast.success('Mercado Pago desconectado');
+      router.refresh();
+    } else {
+      toast.error('No se pudo desconectar');
+    }
+  }
+
   return (
     <div>
       <Seccion
         titulo="Mercado Pago"
-        descripcion={`Con tu propio access token, el dinero de las colegiaturas cae directo a la cuenta de tu escuela. ${brand.name} nunca lo toca.`}
+        descripcion={`Conectas tu propia cuenta por OAuth: el dinero de las colegiaturas cae directo a tu cuenta de Mercado Pago. ${brand.name} nunca ve tu contraseña ni toca ese dinero.`}
         acciones={
           <Button asChild size="sm" variant="outline">
             <a
@@ -802,65 +836,50 @@ function Integraciones({
         <div className="space-y-5 rounded-[12px] border border-[#111111]/[0.09] bg-white p-5">
           <div className="flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-muted-foreground" />
-            <Badge variant={school.mp_access_token ? (esPrueba ? 'pendiente' : 'pagado') : 'neutral'}>
-              {school.mp_access_token
-                ? esPrueba
-                  ? 'Conectado en modo prueba'
-                  : 'Conectado en producción'
-                : 'Sin conectar'}
+            <Badge variant={conectado ? 'pagado' : mpConexion?.status === 'error' ? 'atrasado' : 'neutral'}>
+              {conectado
+                ? 'Conectado'
+                : mpConexion?.status === 'error'
+                  ? 'Error al conectar'
+                  : 'Sin conectar — modo de prueba'}
             </Badge>
           </div>
 
-          <CampoSecreto
-            id="mp-token"
-            label="Access token"
-            valor={mpToken}
-            onChange={setMpToken}
-            placeholder="APP_USR-… o TEST-… para pruebas"
-            ayuda="Panel de MP › Tus integraciones › tu aplicación › Credenciales de producción."
-          />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="mp-key">Public key</Label>
-            <Input
-              id="mp-key"
-              value={mpKey}
-              onChange={(e) => setMpKey(e.target.value)}
-              placeholder="APP_USR-xxxxxxxx-xxxx-…"
-              className="font-mono text-[12px]"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <p className="text-[12px] text-muted-foreground">
-              Se usa en la página de pago para renderizar el Checkout Bricks.
-            </p>
-          </div>
-
-          {esPrueba && (
-            <div className="rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] leading-relaxed text-amber-900">
-              Estás en modo prueba. Usa la tarjeta de prueba de MP México:{' '}
-              <span className="tnum font-medium">5031 7557 3453 0604</span>, vencimiento 11/30, CVV
-              123, titular <span className="font-medium">APRO</span>.
+          {!mpPlataformaConfigurada ? (
+            <div className="rounded-[10px] border border-[#111111]/[0.09] bg-[#111111]/[0.02] px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">
+              Kolek todavía no tiene registrada su aplicación de Mercado Pago a nivel plataforma.
+              Mientras tanto, esta escuela cobra en <strong className="text-ink">modo de
+              prueba</strong>: los links de pago funcionan de extremo a extremo con pagos
+              simulados, sin ningún cargo real.
             </div>
+          ) : conectado ? (
+            <>
+              <p className="text-[13px] text-ink/80">
+                Cuenta conectada
+                {mpConexion?.external_account_id ? `: ${mpConexion.external_account_id}` : ''}.
+              </p>
+              <Button variant="outline" loading={desconectando} onClick={desconectarMp}>
+                Desconectar
+              </Button>
+            </>
+          ) : (
+            <>
+              {mpConexion?.last_error && (
+                <p className="rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+                  {mpConexion.last_error}
+                </p>
+              )}
+              <Button asChild variant="brand">
+                <a href="/api/integrations/mercadopago/connect">
+                  Conectar mi cuenta de Mercado Pago
+                </a>
+              </Button>
+              <p className="text-[12px] text-muted-foreground">
+                Mientras no conectes, los links de pago funcionan en modo de prueba: puedes
+                probar todo el flujo (generar cobro, pagar, conciliar) sin que sea un cargo real.
+              </p>
+            </>
           )}
-
-          <Button
-            variant="brand"
-            loading={g1}
-            onClick={async () => {
-              setG1(true);
-              await onGuardar(
-                {
-                  mp_access_token: mpToken.trim() || null,
-                  mp_public_key: mpKey.trim() || null,
-                },
-                'Mercado Pago actualizado',
-              );
-              setG1(false);
-            }}
-          >
-            Guardar Mercado Pago
-          </Button>
         </div>
       </Seccion>
 
@@ -1167,12 +1186,36 @@ function Equipo({
 
 function PlanActual({
   school,
-  onGuardar,
+  suscripcion,
 }: {
   school: School;
-  onGuardar: (patch: Partial<School>, mensaje?: string) => Promise<void>;
+  suscripcion: Subscription | null;
 }) {
+  const router = useRouter();
   const actual = PLAN_POR_ID[school.plan];
+  const [cambiando, setCambiando] = useState<SchoolPlan | null>(null);
+
+  const ESTADO_LABEL: Record<string, string> = {
+    trialing: 'En periodo de prueba',
+    active: 'Activa',
+    past_due: 'Pago pendiente',
+    suspended: 'Suspendida',
+    canceled: 'Cancelada',
+  };
+
+  async function cambiarPlan(plan: SchoolPlan) {
+    setCambiando(plan);
+    const res = await fetch('/api/subscription/change-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, billing_interval: suscripcion?.billing_interval ?? 'monthly' }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setCambiando(null);
+    if (!res.ok) return toast.error(json.error ?? 'No se pudo cambiar de plan');
+    toast.success(`Plan cambiado a ${PLAN_POR_ID[plan]?.nombre ?? plan}`);
+    router.refresh();
+  }
 
   return (
     <Seccion
@@ -1187,6 +1230,19 @@ function PlanActual({
         </Button>
       }
     >
+      {suscripcion && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-[10px] border border-[#111111]/[0.09] bg-[#111111]/[0.02] px-4 py-2.5">
+          <Badge variant={suscripcion.status === 'active' || suscripcion.status === 'trialing' ? 'pagado' : 'atrasado'}>
+            {ESTADO_LABEL[suscripcion.status] ?? suscripcion.status}
+          </Badge>
+          {suscripcion.status === 'trialing' && suscripcion.trial_ends_at && (
+            <span className="text-[12px] text-muted-foreground">
+              Termina el {new Date(suscripcion.trial_ends_at).toLocaleDateString('es-MX')}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-3">
         {PLANES.map((p) => {
           const activo = p.id === school.plan;
@@ -1194,7 +1250,8 @@ function PlanActual({
             <button
               key={p.id}
               type="button"
-              onClick={() => !activo && onGuardar({ plan: p.id }, `Plan cambiado a ${p.nombre}`)}
+              disabled={cambiando !== null}
+              onClick={() => !activo && cambiarPlan(p.id)}
               className={cn(
                 'rounded-[12px] border p-5 text-left transition-all',
                 activo

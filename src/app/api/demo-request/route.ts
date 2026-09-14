@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checarRateLimit } from '@/lib/rate-limit';
+import { ipDeRequest } from '@/lib/audit';
+import { track } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,6 +13,9 @@ const Body = z.object({
   escuela: z.string().trim().min(1, 'Falta el nombre de la escuela').max(160),
   whatsapp: z.string().trim().min(10, 'WhatsApp inválido').max(20),
   alumnos_aprox: z.string().trim().min(1, 'Falta el número aproximado de alumnos').max(40),
+  acepta_contacto: z.literal(true, {
+    errorMap: () => ({ message: 'Necesitamos tu autorización para contactarte' }),
+  }),
   // Honeypot: los bots suelen rellenar todos los campos del formulario.
   // Un humano nunca ve ni toca este input (está oculto por CSS).
   sitio_web: z.string().max(0).optional().default(''),
@@ -20,10 +26,19 @@ const Body = z.object({
  *
  * Endpoint público (sin auth: el tutor/director todavía no tiene cuenta).
  * No abrimos RLS a `anon` para esto — insertamos con service_role y
- * validamos con zod en el servidor. Es la misma postura de seguridad que
- * ya usa /p/[token]: cero acceso directo de tablas desde el cliente.
+ * validamos con zod en el servidor. Capas anti-spam: rate limit por IP
+ * (mejor esfuerzo, ver src/lib/rate-limit.ts) + honeypot.
  */
 export async function POST(req: Request) {
+  const ip = ipDeRequest(req) ?? 'desconocida';
+  const rl = checarRateLimit(`demo-request:${ip}`);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta de nuevo en unos minutos.' },
+      { status: 429 },
+    );
+  }
+
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await req.json());
@@ -45,12 +60,15 @@ export async function POST(req: Request) {
     escuela: body.escuela,
     whatsapp: body.whatsapp,
     alumnos_aprox: body.alumnos_aprox,
+    source: 'landing',
   });
 
   if (error) {
     console.error('[demo-request] No se pudo guardar:', error.message);
     return NextResponse.json({ error: 'No se pudo enviar. Intenta de nuevo.' }, { status: 500 });
   }
+
+  await track('demo_form_submit', { alumnos_aprox: body.alumnos_aprox });
 
   return NextResponse.json({ ok: true });
 }
