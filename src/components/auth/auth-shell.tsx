@@ -2,25 +2,29 @@ import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 import { brand } from '@/config/brand';
-import { formatMXN, desglose } from '@/lib/fees';
 
 /**
- * Layout partido asimétrico para login/registro: formulario a la izquierda,
- * argumento de venta a la derecha. Nada de tarjeta centrada.
+ * Layout partido asimétrico para login/registro/demo: formulario a la
+ * izquierda, argumento de venta a la derecha. Nada de tarjeta centrada.
+ *
+ * Por diseño, el panel default NUNCA menciona la comisión de procesamiento
+ * ni jerga técnica (RLS, school_id): quien todavía no tiene cuenta no
+ * necesita esos detalles para decidir registrarse.
  */
 export function AuthShell({
   titulo,
   subtitulo,
   children,
   pie,
+  panel,
 }: {
   titulo: string;
   subtitulo: string;
   children: React.ReactNode;
   pie?: React.ReactNode;
+  /** Reemplaza el panel derecho default por completo. */
+  panel?: React.ReactNode;
 }) {
-  const ej = desglose(2450);
-
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
       {/* Formulario */}
@@ -47,49 +51,33 @@ export function AuthShell({
       <aside className="relative hidden overflow-hidden border-l border-[#111111]/[0.08] bg-[#111111]/[0.015] lg:block">
         <div className="pointer-events-none absolute inset-0 grid-bg opacity-60" />
         <div className="relative flex h-full flex-col justify-center px-14">
-          <p className="eyebrow">Cómo se reparte el costo de procesar el pago</p>
-          <h2 className="mt-4 max-w-[22ch] text-display-sm text-ink">
-            Cada escuela decide cómo manejar los costos de procesamiento.
-          </h2>
-
-          <div className="mt-8 max-w-[360px] rounded-[12px] border border-[#111111]/[0.09] bg-white p-6 shadow-card">
-            <p className="text-[12px] text-muted-foreground">Colegiatura · Agosto</p>
-            <div className="mt-4 space-y-2.5">
-              <div className="flex justify-between text-[13px]">
-                <span className="text-muted-foreground">Concepto</span>
-                <span className="tnum">{formatMXN(ej.concepto)}</span>
-              </div>
-              <div className="flex justify-between text-[13px]">
-                <span className="text-muted-foreground">Comisión</span>
-                <span className="tnum">{formatMXN(ej.comision)}</span>
-              </div>
-              <div className="flex justify-between border-t border-[#111111]/[0.09] pt-2.5">
-                <span className="text-[13px] font-medium">Paga el tutor</span>
-                <span className="tnum text-[16px] font-semibold tracking-[-0.02em]">
-                  {formatMXN(ej.total)}
-                </span>
-              </div>
-            </div>
-            <p className="mt-4 rounded-[10px] bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
-              La escuela recibe {formatMXN(ej.concepto)} limpios.
-            </p>
-          </div>
-
-          <ul className="mt-10 space-y-3">
-            {[
-              'Kínder, primaria, prepa, universidad o academia',
-              'Grupos y conceptos 100 % configurables',
-              'Envío masivo por WhatsApp en un clic',
-              'Datos aislados por escuela con RLS',
-            ].map((t) => (
-              <li key={t} className="flex items-start gap-2.5 text-[13px] text-ink/80">
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" strokeWidth={2.6} />
-                {t}
-              </li>
-            ))}
-          </ul>
+          {panel ?? <PanelDefault />}
         </div>
       </aside>
     </div>
+  );
+}
+
+function PanelDefault() {
+  return (
+    <>
+      <p className="eyebrow">Por qué las escuelas cambian</p>
+      <h2 className="mt-4 max-w-[20ch] text-display-sm text-ink">
+        {brand.positioning}
+      </h2>
+      <ul className="mt-10 space-y-3">
+        {[
+          'Kínder, primaria, prepa, universidad o academia',
+          'Grupos y conceptos 100 % configurables',
+          'Recordatorios por WhatsApp preparados en un clic',
+          'Cada escuela ve solo sus propios datos, nunca los de otra',
+        ].map((t) => (
+          <li key={t} className="flex items-start gap-2.5 text-[13px] text-ink/80">
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" strokeWidth={2.6} />
+            {t}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

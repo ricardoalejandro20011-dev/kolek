@@ -9,9 +9,8 @@ import { brand } from '@/config/brand';
 import { cn } from '@/lib/utils';
 
 const LINKS = [
-  { href: '/#casos', label: 'Para tu escuela' },
+  { href: '/#beneficios', label: 'Producto' },
   { href: '/#como', label: 'Cómo funciona' },
-  { href: '/#comision', label: 'Comisión' },
   { href: '/planes', label: 'Planes' },
   { href: '/#faq', label: 'Preguntas' },
 ];

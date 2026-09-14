@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { Check, Minus, Sparkles } from 'lucide-react';
+import { Check, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { PLANES, COMPARATIVA } from '@/lib/plans';
 import { cn } from '@/lib/utils';
+
+const MAX_FEATURES_TARJETA = 5;
 
 export function PricingNota() {
   return (
@@ -59,32 +60,13 @@ export function PricingCards({ ctaHref = '/registro' }: { ctaHref?: string }) {
           </Button>
 
           <ul className="mt-6 space-y-2.5 border-t border-[#111111]/[0.07] pt-6">
-            {plan.features.map((f) => (
+            {plan.features.slice(0, MAX_FEATURES_TARJETA).map((f) => (
               <li key={f} className="flex items-start gap-2.5 text-[13px] leading-snug">
                 <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" strokeWidth={2.6} />
                 <span className="text-ink/85">{f}</span>
               </li>
             ))}
           </ul>
-
-          {plan.proximamente?.length ? (
-            <ul className="mt-4 space-y-2.5 border-t border-dashed border-[#111111]/[0.1] pt-4">
-              {plan.proximamente.map((f) => (
-                <li
-                  key={f}
-                  className="flex items-start justify-between gap-2 text-[13px] leading-snug text-muted-foreground"
-                >
-                  <span className="flex items-start gap-2.5">
-                    <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#111111]/25" />
-                    {f}
-                  </span>
-                  <Badge variant="neutral" className="shrink-0">
-                    Próximamente
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </div>
       ))}
     </div>
@@ -96,7 +78,7 @@ export function PricingMedida() {
     <div className="mt-4 flex flex-col items-start justify-between gap-4 rounded-[12px] border border-[#111111]/[0.09] bg-[#111111]/[0.02] p-6 sm:flex-row sm:items-center">
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
-          ¿Más de 800 alumnos?
+          ¿Más de 700 alumnos?
         </h3>
         <p className="mt-1 max-w-[60ch] text-[13px] leading-relaxed text-muted-foreground">
           Universidades, sistemas con varios planteles o corporativos educativos: armamos
@@ -104,7 +86,7 @@ export function PricingMedida() {
         </p>
       </div>
       <Button asChild variant="default" className="shrink-0">
-        <Link href="/registro?plan=medida">Hablar con nosotros</Link>
+        <Link href="/demo">Hablar con nosotros</Link>
       </Button>
     </div>
   );

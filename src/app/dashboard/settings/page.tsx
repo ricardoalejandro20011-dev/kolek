@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { requireSchool } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { SettingsView } from '@/components/dashboard/settings-view';
+import { mercadoPagoPlataformaConfigurada } from '@/config/env';
 import type { Concept, Group, Profile, Student } from '@/lib/types';
+import type { Subscription } from '@/lib/subscriptions';
 
 export const metadata: Metadata = { title: 'Configuración' };
 export const dynamic = 'force-dynamic';
@@ -11,7 +13,7 @@ export default async function SettingsPage() {
   const { school, profile, userId } = await requireSchool();
   const supabase = createClient();
 
-  const [gruposRes, conceptosRes, equipoRes, alumnosRes] = await Promise.all([
+  const [gruposRes, conceptosRes, equipoRes, alumnosRes, ppcRes, subRes] = await Promise.all([
     supabase.from('groups').select('*').eq('school_id', school.id).order('orden').returns<Group[]>(),
     supabase
       .from('concepts')
@@ -31,6 +33,13 @@ export default async function SettingsPage() {
       .eq('school_id', school.id)
       .eq('status', 'activo')
       .returns<Pick<Student, 'id' | 'group_id'>[]>(),
+    supabase
+      .from('payment_provider_connections_public')
+      .select('*')
+      .eq('school_id', school.id)
+      .eq('provider', 'mercadopago')
+      .maybeSingle(),
+    supabase.from('subscriptions').select('*').eq('school_id', school.id).maybeSingle<Subscription>(),
   ]);
 
   const alumnosPorGrupo: Record<string, number> = {};
@@ -58,6 +67,9 @@ export default async function SettingsPage() {
             miId={userId}
             miRol={profile.role}
             alumnosPorGrupo={alumnosPorGrupo}
+            mpConexion={ppcRes.data ?? null}
+            mpPlataformaConfigurada={mercadoPagoPlataformaConfigurada()}
+            suscripcion={subRes.data ?? null}
           />
         </div>
       </div>

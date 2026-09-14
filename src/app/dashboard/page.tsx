@@ -8,8 +8,9 @@ import { GenerateCycleDialog } from '@/components/dashboard/generate-cycle-dialo
 import { KpiRow, calcularKpis } from '@/components/dashboard/kpi-row';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { esModoPrueba, getMpCreds } from '@/lib/mercadopago';
+import { getPaymentProvider } from '@/lib/payments/factory';
 import { getWaCreds } from '@/lib/whatsapp';
+import { evaluarAcceso, type Subscription } from '@/lib/subscriptions';
 import { cicloActual, cicloLabel } from '@/lib/utils';
 import type { Concept, Group, PaymentRow, Student } from '@/lib/types';
 
@@ -28,7 +29,7 @@ export default async function DashboardPage({
     ? searchParams.ciclo!
     : cicloActual();
 
-  const [pagosRes, gruposRes, conceptosRes, alumnosRes] = await Promise.all([
+  const [pagosRes, gruposRes, conceptosRes, alumnosRes, subRes] = await Promise.all([
     supabase
       .from('v_payment_rows')
       .select('*')
@@ -50,12 +51,14 @@ export default async function DashboardPage({
       .eq('school_id', school.id)
       .eq('status', 'activo')
       .returns<Pick<Student, 'id' | 'group_id'>[]>(),
+    supabase.from('subscriptions').select('*').eq('school_id', school.id).maybeSingle<Subscription>(),
   ]);
 
   const pagos = pagosRes.data ?? [];
   const grupos = gruposRes.data ?? [];
   const conceptos = conceptosRes.data ?? [];
   const alumnos = alumnosRes.data ?? [];
+  const acceso = evaluarAcceso(subRes.data ?? null);
 
   const alumnosPorGrupo: Record<string, number> = {};
   for (const a of alumnos) {
@@ -65,24 +68,25 @@ export default async function DashboardPage({
 
   const kpis = calcularKpis(pagos, alumnos.length);
 
-  const mp = getMpCreds(school);
+  const provider = await getPaymentProvider(school.id);
   const wa = getWaCreds(school);
   const avisos: { tono: 'aviso' | 'info'; texto: string; cta: string; href: string }[] = [];
 
-  if (!mp) {
+  if (!acceso.accesoCompleto && acceso.motivo) {
     avisos.push({
       tono: 'aviso',
-      texto:
-        'Todavía no conectas Mercado Pago. Puedes generar pagos, pero los links no van a cobrar hasta que pongas tu access token.',
-      cta: 'Conectar Mercado Pago',
+      texto: `${acceso.motivo}${acceso.soloLecturaYExportacion ? ' Puedes seguir consultando y exportando.' : ''}`,
+      cta: 'Ver plan',
       href: '/dashboard/settings',
     });
-  } else if (esModoPrueba(mp.accessToken)) {
+  }
+
+  if (provider.id === 'mock') {
     avisos.push({
       tono: 'info',
       texto:
-        'Mercado Pago está en modo prueba (credenciales TEST). Los cobros no son reales: úsalo para validar el flujo completo.',
-      cta: 'Ver integración',
+        'Kolek está en modo de prueba (sin proveedor de pagos real conectado). Los links de pago se pueden simular de extremo a extremo, pero ningún cobro es real.',
+      cta: 'Conectar Mercado Pago',
       href: '/dashboard/settings',
     });
   }
@@ -197,11 +201,7 @@ export default async function DashboardPage({
           </Badge>
           <Badge variant="neutral">
             <CreditCard className="h-3 w-3" />
-            {mp
-              ? esModoPrueba(mp.accessToken)
-                ? 'Mercado Pago en pruebas'
-                : 'Mercado Pago en producción'
-              : 'Mercado Pago sin conectar'}
+            {provider.id === 'mercadopago' ? 'Mercado Pago conectado' : 'Modo de prueba (sin proveedor real)'}
           </Badge>
         </div>
       </div>

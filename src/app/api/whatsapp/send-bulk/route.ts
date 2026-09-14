@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import { asegurarPreferencia } from '@/lib/payments';
+import { asegurarIntentoDeCobro } from '@/lib/payments';
 import { enviarTemplate, getWaCreds, renderMensaje } from '@/lib/whatsapp';
 import { cicloLabel, linkDePago, mapLimit } from '@/lib/utils';
 import type { School } from '@/lib/types';
@@ -17,10 +17,11 @@ const Body = z.object({
 interface FilaPago {
   id: string;
   school_id: string;
+  student_id: string;
+  concept_id: string;
   ciclo: string;
   link_token: string;
   monto_total_cobrado: number;
-  mp_preference_id: string | null;
   fecha_vencimiento: string;
   students: {
     nombre_alumno: string;
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
   const { data: pagos, error } = await supabase
     .from('payments')
     .select(
-      `id, school_id, ciclo, link_token, monto_total_cobrado, mp_preference_id, fecha_vencimiento,
+      `id, school_id, student_id, concept_id, ciclo, link_token, monto_total_cobrado, fecha_vencimiento,
        students ( nombre_alumno, nombre_tutor, whatsapp_tutor, email_tutor ),
        concepts ( nombre )`,
     )
@@ -90,10 +91,13 @@ export async function POST(req: Request) {
       return { id: p.id, estado: 'fallado' as const, error: 'El tutor no tiene WhatsApp' };
     }
 
-    // El link debe llevar preference lista; si MP falló antes, se reintenta aquí.
-    await asegurarPreferencia(supabase, p, school, {
+    // El link debe llevar un intento de cobro listo; si el proveedor falló
+    // antes, se reintenta aquí.
+    await asegurarIntentoDeCobro(supabase, p, school, {
       conceptoNombre: concepto,
       alumnoNombre: alumno.nombre_alumno,
+      studentId: p.student_id,
+      conceptId: p.concept_id,
       tutorNombre: alumno.nombre_tutor,
       tutorEmail: alumno.email_tutor,
     });

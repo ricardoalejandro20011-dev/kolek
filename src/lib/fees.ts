@@ -1,50 +1,50 @@
 /**
- * Kolek — Cálculo de comisión (fórmula fija de Mercado Pago, hoy).
+ * Kolek — capa de compatibilidad sobre el nuevo PaymentFeeEngine
+ * (src/lib/fee-engine.ts).
  *
- * COMPORTAMIENTO ACTUAL (a reemplazar por un PaymentFeeEngine configurable
- * por escuela — ver auditoría entregada, sección "Motor de comisiones"):
- * el tutor paga la comisión de Mercado Pago encima del concepto. La escuela
- * recibe el monto limpio. Kolek nunca la absorbe.
- *
- *     total_a_cobrar = monto_concepto * 1.0406 + 3.48
- *
- * 1.0406  → 4.06% variable de MP (incluye IVA sobre la comisión)
- * 3.48    → cargo fijo por operación (incluye IVA)
+ * Este archivo existe para que el resto de la app (checkout público,
+ * dashboard, settings) no tenga que cambiar todas sus llamadas de golpe.
+ * Internamente ya NO usa la fórmula fija `monto × 1.0406 + $3.48` — calcula
+ * con gross-up real contra DEFAULT_FEE_CONFIG (política: el tutor absorbe,
+ * igual que antes por default). Los totales mostrados cambian ligeramente
+ * (unos pesos más arriba) respecto al MVP porque la fórmula vieja SÍ tenía
+ * un error matemático: sumar el porcentaje directo sobre el monto base no
+ * deja a la escuela su neto exacto una vez que el proveedor cobra su
+ * comisión SOBRE el monto que pagó el tutor. Ver fee-engine.ts.
  */
+import { DEFAULT_FEE_CONFIG, calcularDesglose, type FeeConfig } from '@/lib/fee-engine';
+import { centavosToPesos, pesosToCentavos } from '@/lib/money';
 
-export const MP_RATE = 1.0406;
-export const MP_FIXED = 3.48;
-
-/** Redondeo a 2 decimales sin errores de punto flotante (0.1+0.2 === 0.3). */
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-/**
- * Total que se le cobra al tutor para que a la escuela le llegue
- * `montoConcepto` limpio.
- */
-export function calcTotalConComision(montoConcepto: number): number {
+/** Total que se le cobra al tutor para que a la escuela le llegue `montoConcepto` limpio. */
+export function calcTotalConComision(montoConcepto: number, config: FeeConfig = DEFAULT_FEE_CONFIG): number {
   const monto = Number(montoConcepto) || 0;
   if (monto <= 0) return 0;
-  return round2(monto * MP_RATE + MP_FIXED);
+  const d = calcularDesglose(pesosToCentavos(monto), config);
+  return centavosToPesos(d.payerTotalCentavos);
 }
 
 /** Solo la parte de comisión, para mostrar el desglose al tutor. */
-export function calcComision(montoConcepto: number): number {
+export function calcComision(montoConcepto: number, config: FeeConfig = DEFAULT_FEE_CONFIG): number {
   const monto = Number(montoConcepto) || 0;
   if (monto <= 0) return 0;
-  return round2(calcTotalConComision(monto) - monto);
+  const d = calcularDesglose(pesosToCentavos(monto), config);
+  return centavosToPesos(d.feeCentavos);
 }
 
-/** Desglose completo listo para pintar en la página pública de pago. */
-export function desglose(montoConcepto: number) {
-  const concepto = round2(Number(montoConcepto) || 0);
-  const total = calcTotalConComision(concepto);
+/** Desglose completo (en pesos) listo para pintar en la página pública de pago. */
+export function desglose(montoConcepto: number, config: FeeConfig = DEFAULT_FEE_CONFIG) {
+  const monto = Number(montoConcepto) || 0;
+  const d = calcularDesglose(pesosToCentavos(monto), config);
   return {
-    concepto,
-    comision: round2(total - concepto),
-    total,
+    concepto: centavosToPesos(d.netCentavos),
+    comision: centavosToPesos(d.feeCentavos),
+    total: centavosToPesos(d.payerTotalCentavos),
+    escuelaRecibe: centavosToPesos(d.schoolReceivesCentavos),
+    policy: d.policy,
   };
 }
 
