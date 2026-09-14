@@ -77,11 +77,15 @@ export default function AvisoPrivacidadPage() {
             <p className="mt-2">
               Puedes solicitar acceso, rectificación, cancelación u oposición sobre tus datos.
               Como {brand.name} actúa como encargado, la vía más rápida es pedirlo directamente a
-              tu escuela; también puedes escribirnos a través del{' '}
-              <a href="/demo" className="text-brand-600 underline underline-offset-2">
-                formulario de contacto
+              tu escuela; también puedes escribirnos a{' '}
+              <a href={`mailto:${brand.contactEmail}`} className="text-brand-600 underline underline-offset-2">
+                {brand.contactEmail}
               </a>{' '}
-              de la plataforma.
+              o por{' '}
+              <a href="/contacto" className="text-brand-600 underline underline-offset-2">
+                WhatsApp
+              </a>
+              .
             </p>
           </section>
 

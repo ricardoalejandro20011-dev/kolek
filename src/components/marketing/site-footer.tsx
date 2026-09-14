@@ -54,6 +54,14 @@ export function SiteFooter() {
             <p className="mt-6 text-[12px] text-muted-foreground">
               No somos un ERP escolar. No reemplazamos tu sistema académico.
             </p>
+            <div className="mt-4 space-y-1 text-[12px] text-muted-foreground">
+              <a href={`mailto:${brand.contactEmail}`} className="block hover:text-ink">
+                {brand.contactEmail}
+              </a>
+              <a href="/contacto" className="block hover:text-ink">
+                {brand.contactPhoneDisplay}
+              </a>
+            </div>
           </div>
 
           <div className="grid gap-10 sm:grid-cols-2 md:col-span-8 lg:grid-cols-4">

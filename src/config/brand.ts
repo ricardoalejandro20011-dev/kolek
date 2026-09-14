@@ -31,6 +31,12 @@ export const brand = {
   positioning: 'No reemplazamos tu sistema escolar. Arreglamos tu cobranza.',
   /** Texto exacto del pie de página en toda la app. */
   footerLine: 'A product by Ravela Group',
+  /** Correo de contacto real — visible en /contacto, footer y páginas legales. */
+  contactEmail: 'kolek@ravela.online',
+  /** WhatsApp de contacto, formato legible para mostrar en pantalla. */
+  contactPhoneDisplay: '+52 56 2534 6426',
+  /** Mismo número en E.164 sin "+", para armar links wa.me / tel:. */
+  contactPhoneE164: '525625346426',
 } as const;
 
 export type Brand = typeof brand;

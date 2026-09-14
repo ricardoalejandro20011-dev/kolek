@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { checarRateLimit } from '@/lib/rate-limit';
 import { ipDeRequest } from '@/lib/audit';
 import { track } from '@/lib/analytics';
+import { notificarNuevaSolicitudDemo } from '@/lib/email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,12 @@ export async function POST(req: Request) {
   }
 
   await track('demo_form_submit', { alumnos_aprox: body.alumnos_aprox });
+  await notificarNuevaSolicitudDemo({
+    nombre: body.nombre,
+    escuela: body.escuela,
+    whatsapp: body.whatsapp,
+    alumnosAprox: body.alumnos_aprox,
+  });
 
   return NextResponse.json({ ok: true });
 }

@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { brand } from '@/config/brand';
 import { trackClient } from '@/lib/analytics-client';
 
 const RANGOS_ALUMNOS = ['Menos de 80', '80–300', '300–700', 'Más de 700'];
@@ -68,6 +69,10 @@ export function DemoForm() {
   }
 
   if (enviado) {
+    const waHref = `https://wa.me/${brand.contactPhoneE164}?text=${encodeURIComponent(
+      `Hola, soy ${nombre} de ${escuela}. Acabo de pedir una demo de ${brand.name} (${alumnos} alumnos aprox.) y quiero agendarla.`,
+    )}`;
+
     return (
       <div className="rounded-[12px] border border-emerald-200 bg-emerald-50 p-6">
         <CheckCircle2 className="h-6 w-6 text-emerald-600" strokeWidth={1.7} />
@@ -77,6 +82,12 @@ export function DemoForm() {
         <p className="mt-2 text-[13px] leading-relaxed text-emerald-800/85">
           Te contactamos por WhatsApp para agendar tu demo de 15 minutos, adaptada a tu escuela.
         </p>
+        <Button asChild variant="brand" className="mt-4 w-full">
+          <a href={waHref} target="_blank" rel="noreferrer">
+            <MessageCircle className="h-4 w-4" />
+            Escríbenos ahora por WhatsApp
+          </a>
+        </Button>
       </div>
     );
   }

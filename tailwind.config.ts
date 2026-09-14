@@ -44,7 +44,7 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        /* Marca COLEKTA */
+        /* Marca Kolek */
         brand: {
           50: '#F0F9FF',
           100: '#E0F2FE',

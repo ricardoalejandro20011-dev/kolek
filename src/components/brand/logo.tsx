@@ -1,31 +1,20 @@
 import { cn } from '@/lib/utils';
-import { brand } from '@/config/brand';
 
 /**
- * Marca de Kolek: una C que se convierte en palomita de "pagado",
- * trazada en una sola línea continua. Hereda currentColor.
- *
- * El trazo se mantiene aunque el nombre cambie — es el símbolo, no la
- * palabra, lo que identifica el producto en favicons y espacios chicos.
+ * Marca de Kolek — mascota robot + "K", arte final entregado por el
+ * cliente (public/brand/kolek-icon.png y kolek-wordmark.png). Se usan
+ * como <img> normal (no next/image) porque el contenedor decide el alto
+ * vía className y el ancho se ajusta solo por el aspect-ratio nativo del
+ * archivo — no hay que declarar tamaños fijos en cada sitio donde se usa.
  */
-export function LogoMark({ className, ...props }: React.SVGProps<SVGSVGElement>) {
+export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 40 40"
-      fill="none"
+    <img
+      src="/brand/kolek-icon.png"
+      alt=""
       aria-hidden="true"
-      className={cn('h-6 w-6 text-brand-500', className)}
-      {...props}
-    >
-      <path
-        d="M27.46 9.35 A13 13 0 1 0 23.36 32.56 L34.5 17.5"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+      className={cn('h-6 w-6 object-contain', className)}
+    />
   );
 }
 
@@ -38,14 +27,19 @@ export function Logo({
   markClassName?: string;
   showWordmark?: boolean;
 }) {
+  if (!showWordmark) {
+    return (
+      <span className={cn('inline-flex items-center', className)}>
+        <LogoMark className={cn('h-[26px] w-[26px]', markClassName)} />
+      </span>
+    );
+  }
+
   return (
-    <span className={cn('inline-flex items-center gap-2', className)}>
-      <LogoMark className={cn('h-[22px] w-[22px]', markClassName)} />
-      {showWordmark && (
-        <span className="text-[15px] font-semibold tracking-[-0.02em] text-ink">
-          {brand.name}
-        </span>
-      )}
-    </span>
+    <img
+      src="/brand/kolek-wordmark.png"
+      alt="Kolek"
+      className={cn('h-7 w-auto object-contain', className)}
+    />
   );
 }
