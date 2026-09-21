@@ -21,19 +21,33 @@ export interface NuevaSolicitudDemo {
   alumnosAprox: string;
 }
 
-/** Avisa al correo de contacto de Kolek que llegó un lead nuevo desde /demo. */
+/**
+ * Avisa que llegó un lead nuevo desde /demo.
+ *
+ * Remitente: por default usa el dominio compartido de Resend
+ * (onboarding@resend.dev), que manda sin necesitar verificar ningún DNS —
+ * suficiente para un aviso INTERNO. `RESEND_FROM` lo sobreescribe una vez
+ * que `ravela.online` esté verificado en Resend, si se quiere mandar con
+ * la marca puesta.
+ *
+ * Destinatario: LEAD_NOTIFICATION_EMAIL (el correo que de verdad revisas
+ * a diario) — no necesariamente brand.contactEmail, que es el correo
+ * PÚBLICO que ven las escuelas y puede no tener buzón propio todavía.
+ * `reply_to` sí queda como brand.contactEmail para que, si contestas
+ * este aviso, la respuesta salga con la cara de Kolek.
+ */
 export async function notificarNuevaSolicitudDemo(datos: NuevaSolicitudDemo): Promise<void> {
   const resend = getResend();
   if (!resend) return;
 
-  // Resend exige que el dominio del remitente esté verificado (SPF/DKIM) en
-  // su panel antes de poder mandar desde él — configúralo con RESEND_FROM.
-  const from = process.env.RESEND_FROM?.trim() || `${brand.name} <${brand.contactEmail}>`;
+  const from = process.env.RESEND_FROM?.trim() || `${brand.name} <onboarding@resend.dev>`;
+  const to = process.env.LEAD_NOTIFICATION_EMAIL?.trim() || brand.contactEmail;
 
   try {
     await resend.emails.send({
       from,
-      to: brand.contactEmail,
+      to,
+      replyTo: brand.contactEmail,
       subject: `Nueva solicitud de demo — ${datos.escuela}`,
       text: [
         `Escuela: ${datos.escuela}`,
