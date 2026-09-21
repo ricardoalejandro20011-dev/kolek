@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requireSuperadmin } from '@/lib/superadmin';
+import { requireSuperadminApi, SuperadminAuthError } from '@/lib/superadmin';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { calcularFinDeGracia, precioMensualCentavos } from '@/lib/subscriptions';
 import { registrarAuditoria, ipDeRequest } from '@/lib/audit';
@@ -30,7 +30,15 @@ const Body = z.discriminatedUnion('accion', [
  * colegiaturas.
  */
 export async function POST(req: Request) {
-  const { userId } = await requireSuperadmin();
+  let userId: string;
+  try {
+    ({ userId } = await requireSuperadminApi());
+  } catch (e) {
+    if (e instanceof SuperadminAuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    throw e;
+  }
   const db = createAdminClient();
 
   let body: z.infer<typeof Body>;

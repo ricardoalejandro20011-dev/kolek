@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase/client';
+import { APP_URL } from '@/lib/utils';
 
 export function LoginForm() {
   const router = useRouter();
@@ -19,6 +20,9 @@ export function LoginForm() {
   const [verPass, setVerPass] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [modoRecuperar, setModoRecuperar] = useState(false);
+  const [correoEnviado, setCorreoEnviado] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +52,77 @@ export function LoginForm() {
     router.refresh();
   }
 
+  async function onRecuperar(e: React.FormEvent) {
+    e.preventDefault();
+    setCargando(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${APP_URL}/restablecer-contrasena`,
+    });
+
+    setCargando(false);
+    // Siempre mostramos éxito, exista o no esa cuenta — así no se puede usar
+    // este formulario para adivinar qué correos están registrados.
+    if (err) console.error('[reset-password]', err.message);
+    setCorreoEnviado(true);
+  }
+
+  if (modoRecuperar) {
+    if (correoEnviado) {
+      return (
+        <div className="rounded-[12px] border border-[#111111]/[0.09] bg-white p-6 shadow-subtle">
+          <MailCheck className="h-6 w-6 text-brand-500" strokeWidth={1.7} />
+          <h2 className="mt-4 text-[15px] font-semibold tracking-[-0.01em]">Revisa tu correo</h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+            Si <strong className="text-ink">{email}</strong> tiene una cuenta, te mandamos un link
+            para poner una contraseña nueva. Puede tardar unos minutos; revisa spam también.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setModoRecuperar(false);
+              setCorreoEnviado(false);
+            }}
+            className="mt-4 text-[13px] font-medium text-brand-600 hover:underline"
+          >
+            Volver a entrar
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <form onSubmit={onRecuperar} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="email-recuperar">Correo</Label>
+          <Input
+            id="email-recuperar"
+            type="email"
+            autoComplete="email"
+            required
+            placeholder="direccion@tuescuela.mx"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+
+        <Button type="submit" variant="brand" className="w-full" size="lg" loading={cargando}>
+          Enviar link de recuperación
+        </Button>
+
+        <button
+          type="button"
+          onClick={() => setModoRecuperar(false)}
+          className="w-full text-center text-[13px] text-muted-foreground hover:text-ink"
+        >
+          Volver a entrar
+        </button>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1.5">
@@ -64,7 +139,16 @@ export function LoginForm() {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="password">Contraseña</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Contraseña</Label>
+          <button
+            type="button"
+            onClick={() => setModoRecuperar(true)}
+            className="text-[12px] font-medium text-brand-600 hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
         <div className="relative">
           <Input
             id="password"

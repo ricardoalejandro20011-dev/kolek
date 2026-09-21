@@ -9,10 +9,12 @@ import {
   LogOut,
   MessageCircle,
   Settings,
+  ShieldCheck,
   Users,
 } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 import { brand } from '@/config/brand';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,11 +40,13 @@ export function Sidebar({
   email,
   nombreUsuario,
   alumnosActivos,
+  esSuperadmin,
 }: {
   school: School;
   email: string;
   nombreUsuario: string | null;
   alumnosActivos: number;
+  esSuperadmin: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -142,8 +146,13 @@ export function Sidebar({
               {initials(nombreUsuario || email || 'KO')}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12px] font-medium text-ink">
-                {nombreUsuario || 'Mi cuenta'}
+              <span className="flex items-center gap-1.5 truncate text-[12px] font-medium text-ink">
+                <span className="truncate">{nombreUsuario || 'Mi cuenta'}</span>
+                {esSuperadmin && (
+                  <Badge variant="brand" className="shrink-0 px-1.5 py-0 text-[9px]">
+                    Superadmin
+                  </Badge>
+                )}
               </span>
               <span className="block truncate text-[11px] text-muted-foreground">{email}</span>
             </span>
@@ -161,6 +170,17 @@ export function Sidebar({
             <DropdownMenuItem asChild>
               <Link href="/planes">Planes y límites</Link>
             </DropdownMenuItem>
+            {esSuperadmin && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/superadmin">
+                    <ShieldCheck />
+                    Panel interno (superadmin)
+                  </Link>
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem destructive onClick={salir} disabled={saliendo}>
               <LogOut />

@@ -30,6 +30,7 @@ export default async function DashboardLayout({
           email={email}
           nombreUsuario={profile.nombre}
           alumnosActivos={count ?? 0}
+          esSuperadmin={profile.is_superadmin}
         />
       </div>
       <div className="min-w-0 flex-1">{children}</div>

@@ -38,6 +38,8 @@ export interface Profile {
   nombre: string | null;
   email: string | null;
   role: MemberRole;
+  /** Acceso al panel interno de Kolek (/superadmin) — se activa a mano en la base de datos. */
+  is_superadmin: boolean;
   created_at: string;
 }
 

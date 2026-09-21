@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/superadmin';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { Badge } from '@/components/ui/badge';
+import { LogoMark } from '@/components/brand/logo';
 import { SchoolActions } from '@/components/superadmin/school-actions';
 import { formatCentavos } from '@/lib/money';
 import { formatFecha } from '@/lib/utils';
@@ -20,7 +23,7 @@ const ESTADO_BADGE: Record<string, 'pagado' | 'pendiente' | 'atrasado' | 'neutra
 };
 
 export default async function SuperadminPage() {
-  await requireSuperadmin();
+  const { email } = await requireSuperadmin();
   const db = createAdminClient();
 
   const [{ data: schools }, { data: subs }, { data: demoRequests }, { data: webhooksFallidos }] =
@@ -45,10 +48,22 @@ export default async function SuperadminPage() {
   return (
     <div className="min-h-screen bg-[#111111]/[0.015] px-6 py-10 lg:px-10">
       <div className="mx-auto max-w-[1200px]">
-        <h1 className="text-[22px] font-semibold tracking-[-0.025em] text-ink">Panel interno de Kolek</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          Datos reales de esta instancia — sin proyecto Supabase real conectado, la mayoría son 0.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <LogoMark className="h-6 w-6" />
+            <div>
+              <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-ink">Panel interno de Kolek</h1>
+              <p className="text-[12px] text-muted-foreground">Conectado como {email}</p>
+            </div>
+          </div>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#111111]/[0.1] bg-white px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-[#111111]/[0.03]"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Volver a mi escuela
+          </Link>
+        </div>
 
         {/* KPIs */}
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
