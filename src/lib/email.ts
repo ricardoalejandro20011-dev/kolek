@@ -26,7 +26,9 @@ export async function notificarNuevaSolicitudDemo(datos: NuevaSolicitudDemo): Pr
   const resend = getResend();
   if (!resend) return;
 
-  const from = process.env.RESEND_FROM?.trim() || `${brand.name} <notificaciones@kolek.mx>`;
+  // Resend exige que el dominio del remitente esté verificado (SPF/DKIM) en
+  // su panel antes de poder mandar desde él — configúralo con RESEND_FROM.
+  const from = process.env.RESEND_FROM?.trim() || `${brand.name} <${brand.contactEmail}>`;
 
   try {
     await resend.emails.send({
